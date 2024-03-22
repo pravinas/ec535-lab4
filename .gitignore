@@ -1,0 +1,6 @@
+*.img
+stock-linux-4.19.82-ti-rt-r33
+stock-zImage
+bootfs/*
+rootfs/*
+
