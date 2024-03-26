@@ -4,9 +4,9 @@
  *  @author Pravi Samaratunga
  */
 
-// TODO: get module to compile successfully
 // TODO: implement state machine (see process_input())
 // TODO: pull header information out into header file
+// TODO: clean up headers
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -29,6 +29,7 @@
 #include <linux/cdev.h>
 #include <linux/time.h>
 #include <linux/delay.h> /* msleep() */
+#include <linux/kthread.h> /* kthread_should_stop */
 
 #define BUF_SIZE 10
 
@@ -38,36 +39,36 @@
 #define BTN0 26
 #define BTN1 46
 
-#define MODE_OFF 0
-#define MODE_NORMAL 1
-#define MODE_NORMAL 1
-#define MODE_FLASHING_RED 2
-#define MODE_FLASHING_YELLOW 3
-#define MODE_PEDESTRIAN 4
-#define DEFAULT_MODE MODE_OFF
+#define MODE_NORMAL 0
+#define MODE_FLASHING_RED 1
+#define MODE_FLASHING_YELLOW 2
+#define MODE_PEDESTRIAN 3
+#define DEFAULT_MODE MODE_NORMAL
 
 #define CYCLE 100 // Time in ms per flash
 
 /* Declaration of memory.c functions */
 static int mytraffic_open(struct inode *inode, struct file *filp);
 static int mytraffic_release(struct inode *inode, struct file *filp);
-static ssize_t mytraffic_read(struct file *filp, char *buf, size_t count, loff_t *f_pos);
-static ssize_t mytraffic_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos);
+// static ssize_t mytraffic_read(struct file *filp, char *buf, size_t count, loff_t *f_pos);
+// static ssize_t mytraffic_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos);
 static void mytraffic_exit(void);
 static int mytraffic_init(void);
+static bool sentinel;
 
 /* Structure that declares the usual file */
 /* access functions */
 struct file_operations mytraffic_fops = 
 {
-	.read= mytraffic_read,
-	.write= mytraffic_write,
+// 	.read= mytraffic_read,
+// 	.write= mytraffic_write,
 	.open= mytraffic_open,
 	.release= mytraffic_release,
 };
 
+static void update(void);
 static void process_input(void);
-static void off_mode(void);
+
 static void normal_mode(void);
 static void flashing_red_mode(void);
 static void flashing_yellow_mode(void);
@@ -78,7 +79,7 @@ static void pedestrian_mode(void);
 static int mytraffic_major = 61;
 
 static char output_buffer[BUF_SIZE];
-static char button[2];
+static int button[2];
 static int light_mode;
 
 /* Declaration of the init and exit functions */
@@ -138,8 +139,15 @@ static int mytraffic_init(void)
     gpio_direction_input(BTN1);
 
     // Set state to 0
-    light_mode = MODE_OFF;
+    light_mode = DEFAULT_MODE;
     printk(KERN_ALERT "Inserting mytraffic module\n"); 
+
+//    while (!kthread_should_stop()) {
+    sentinel = true;
+    while (sentinel) {
+        update();
+        msleep(CYCLE);
+    }
 
     return 0;
 r_RED:
@@ -174,9 +182,8 @@ static void mytraffic_exit(void)
     gpio_free(BTN0);
     gpio_free(BTN1);
 
+    sentinel=false;
     printk(KERN_INFO "Exiting my_module\n");
-
-	// remove_proc_entry("mytraffic", NULL);
 }
 
 static int mytraffic_open(struct inode *inode, struct file *filp)
@@ -189,88 +196,32 @@ static int mytraffic_open(struct inode *inode, struct file *filp)
 
 static int mytraffic_release(struct inode *inode, struct file *filp)
 {
-	//printk(KERN_INFO "release called: process id %d, command %s\n",
-		//current->pid, current->comm);
 	memset(output_buffer,0,sizeof(BUF_SIZE));
 	// single_release(inode, filp);
 	// Success 
 	return 0;
 }
 
-
-
-static ssize_t mytraffic_read(struct file *filp, char *buf, 
-							size_t count, loff_t *f_pos)
-{ 
-	
-	uint8_t gpio_state = 0;
-    gpio_state = gpio_get_value(BTN0);
-    button[0] = (gpio_state == 1) ? '1' : '0';
-
-    gpio_state = gpio_get_value(BTN1);
-    button[1] = (gpio_state == 1) ? '1' : '0';
-
-    
-    count = 2;
-    if(copy_to_user(buf,output_buffer,count) > 0) {
-        printk(KERN_ERR "Error: bytes not copied\n");
-    }
-    
-	return count; 
-}
-
-
-static ssize_t mytraffic_write(struct file *filp, const char *buf,
-                             size_t count, loff_t *f_pos)
-{
-    	// Assuming buf contains the expiration time and message separated by a space
-	
-
-	if (copy_from_user(output_buffer, buf, count)!=0)
-	{
-		return -EFAULT;
-    }
-    
-
+static void update () {
+    process_input();
     switch(light_mode) {
-        case MODE_OFF:
-            off_mode();
-            break;
         case MODE_NORMAL:
             normal_mode();
-            if(button[0]==1 && button[1]==0)
-                light_mode = 1;
-            else if (button[0]==0 && button[1]==0)
-                light_mode = 0;
-            else if (button[0]==0 && button[1]==1)
-                light_mode = 3;
             break;
         case MODE_FLASHING_RED:
             flashing_red_mode();
-            if(button[0]==1 && button[1]==0)
-                light_mode = 2;
-            else if (button[0]==0)
-                light_mode = 1;
             break;
         case MODE_FLASHING_YELLOW:
             flashing_yellow_mode();
-            if(button[0]==1 && button[1]==0)
-                light_mode = 0;
-            else if (button[0]==0)
-                light_mode = 2;
             break;
         case MODE_PEDESTRIAN:
             pedestrian_mode();
-            light_mode = 0;
             break;
         default:
-            off_mode();
+            normal_mode();
             printk(KERN_ERR "something went wrong!");
             break;            
     }
-
-    process_input();
-    return count;
 }
 
 /** process_input()
@@ -278,14 +229,11 @@ static ssize_t mytraffic_write(struct file *filp, const char *buf,
  */
 static void process_input(){
     // TODO: read values from BTN0 and BTN1 and process appropriately
-}
+    button[0] = gpio_get_value(BTN0) == 1;
+    button[1] = gpio_get_value(BTN1) == 1;
+    light_mode = (light_mode + button[0]) % 3;
 
-static void off_mode() {
-    gpio_set_value(RED,0);
-    gpio_set_value(YELLOW,0);
-    gpio_set_value(GREEN,1);
-    msleep(1*CYCLE);
-
+    printk(KERN_ALERT "BTN0 %d\nBTN1 %d\n\n", button[0], button[1]);
 }
 
 static void normal_mode() {

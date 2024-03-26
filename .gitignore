@@ -4,3 +4,10 @@ stock-zImage
 bootfs/*
 rootfs/*
 src/modules.order
+*.o
+*.ko
+*.cmd
+Module.symvers
+*.mod
+*.swp
+*.mod.c
