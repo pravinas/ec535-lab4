@@ -1,3 +1,13 @@
+/** mytraffic.c
+ *  Manipulate traffic lights per lab4 requirements.
+ *  @author Megha Shah
+ *  @author Pravi Samaratunga
+ */
+
+// TODO: get module to compile successfully
+// TODO: implement state machine (see process_input())
+// TODO: pull header information out into header file
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/timer.h>
@@ -18,7 +28,25 @@
 #include <linux/err.h>
 #include <linux/cdev.h>
 #include <linux/time.h>
+#include <linux/delay.h> /* msleep() */
 
+#define BUF_SIZE 10
+
+#define RED 67
+#define YELLOW 68
+#define GREEN 44
+#define BTN0 26
+#define BTN1 46
+
+#define MODE_OFF 0
+#define MODE_NORMAL 1
+#define MODE_NORMAL 1
+#define MODE_FLASHING_RED 2
+#define MODE_FLASHING_YELLOW 3
+#define MODE_PEDESTRIAN 4
+#define DEFAULT_MODE MODE_OFF
+
+#define CYCLE 100 // Time in ms per flash
 
 /* Declaration of memory.c functions */
 static int mytraffic_open(struct inode *inode, struct file *filp);
@@ -38,33 +66,24 @@ struct file_operations mytraffic_fops =
 	.release= mytraffic_release,
 };
 
-
-
-/* Declaration of the init and exit functions */
-module_init(mytraffic_init);
-module_exit(mytraffic_exit);
-
-
+static void process_input(void);
+static void off_mode(void);
+static void normal_mode(void);
+static void flashing_red_mode(void);
+static void flashing_yellow_mode(void);
+static void pedestrian_mode(void);
 
 /* Global variables of the driver */
 /* Major number */
 static int mytraffic_major = 61;
 
-
-#define BUF_SIZE 10
-
-#define RED (67)
-#define YELLOW (68)
-#define GREEN (44)
-#define BTN0 (26)
-#define BTN1 (46)
-
-#define CYCLE 1;
-
 static char output_buffer[BUF_SIZE];
-static int outbuf_len;
 static char button[2];
-int state;
+static int light_mode;
+
+/* Declaration of the init and exit functions */
+module_init(mytraffic_init);
+module_exit(mytraffic_exit);
 
 static int mytraffic_init(void)
 {
@@ -110,27 +129,29 @@ static int mytraffic_init(void)
         printk(KERN_ALERT "ERROR: GPIO %d request\n",RED);
         goto r_BTN0;
     }
-    gpio_direction_input(BTN0,0);
+    gpio_direction_input(BTN0);
 
     if(gpio_request(BTN1,"BTN1") < 0) {
         printk(KERN_ALERT "ERROR: GPIO %d request\n",RED);
         goto r_BTN1;
     }
-    gpio_direction_input(BTN1,0);
+    gpio_direction_input(BTN1);
 
+    // Set state to 0
+    light_mode = MODE_OFF;
     printk(KERN_ALERT "Inserting mytraffic module\n"); 
 
     return 0;
 r_RED:
-    gpio_free(67);
+    gpio_free(RED);
 r_YELLOW:
-    gpio_free(68);
+    gpio_free(YELLOW);
 r_GREEN:
-    gpio_free(44);
+    gpio_free(GREEN);
 r_BTN0:
-    gpio_free(26);
+    gpio_free(BTN0);
 r_BTN1:
-    gpio_free(46);
+    gpio_free(BTN1);
 
 	
 	return -1;
@@ -142,16 +163,16 @@ static void mytraffic_exit(void)
 {
 	/* Freeing the major number */
 	unregister_chrdev(mytraffic_major, "mytraffic");    	
-    gpio_set_value(67,0);
-    gpio_set_value(68,0);
-    gpio_set_value(44,0);
-    gpio_set_value(26,0);
-    gpio_set_value(46,0);
-    gpio_free(67);
-    gpio_free(68);
-    gpio_free(44);
-    gpio_free(26);
-    gpio_free(46);
+    gpio_set_value(RED,0);
+    gpio_set_value(YELLOW,0);
+    gpio_set_value(GREEN,0);
+    gpio_set_value(BTN0,0);
+    gpio_set_value(BTN1,0);
+    gpio_free(RED);
+    gpio_free(YELLOW);
+    gpio_free(GREEN);
+    gpio_free(BTN0);
+    gpio_free(BTN1);
 
     printk(KERN_INFO "Exiting my_module\n");
 
@@ -170,7 +191,7 @@ static int mytraffic_release(struct inode *inode, struct file *filp)
 {
 	//printk(KERN_INFO "release called: process id %d, command %s\n",
 		//current->pid, current->comm);
-	memset(output_buffer,0,sizeof(BUFFER_SIZE));
+	memset(output_buffer,0,sizeof(BUF_SIZE));
 	// single_release(inode, filp);
 	// Success 
 	return 0;
@@ -199,8 +220,7 @@ static ssize_t mytraffic_read(struct file *filp, char *buf,
 }
 
 
-static ssize_t mytraffic
-_write(struct file *filp, const char *buf,
+static ssize_t mytraffic_write(struct file *filp, const char *buf,
                              size_t count, loff_t *f_pos)
 {
     	// Assuming buf contains the expiration time and message separated by a space
@@ -210,41 +230,65 @@ _write(struct file *filp, const char *buf,
 	{
 		return -EFAULT;
     }
+    
 
-    switch(next_state) {
-        case 0:
+    switch(light_mode) {
+        case MODE_OFF:
+            off_mode();
+            break;
+        case MODE_NORMAL:
             normal_mode();
             if(button[0]==1 && button[1]==0)
-                next_state = 1;
+                light_mode = 1;
             else if (button[0]==0 && button[1]==0)
-                next_state = 0;
+                light_mode = 0;
             else if (button[0]==0 && button[1]==1)
-                next_state = 3;
-
-        case 1:
+                light_mode = 3;
+            break;
+        case MODE_FLASHING_RED:
             flashing_red_mode();
             if(button[0]==1 && button[1]==0)
-                next_state = 2;
+                light_mode = 2;
             else if (button[0]==0)
-                next_state = 1;
-        case 2:
+                light_mode = 1;
+            break;
+        case MODE_FLASHING_YELLOW:
             flashing_yellow_mode();
             if(button[0]==1 && button[1]==0)
-                next_state = 0;
+                light_mode = 0;
             else if (button[0]==0)
-                next_state = 2;
-        case 3:
+                light_mode = 2;
+            break;
+        case MODE_PEDESTRIAN:
             pedestrian_mode();
-            next_state = 0;
+            light_mode = 0;
+            break;
         default:
+            off_mode();
             printk(KERN_ERR "something went wrong!");
             break;            
     }
+
+    process_input();
     return count;
 }
 
-static void normal_mode() {
+/** process_input()
+ *  implements light state machine
+ */
+static void process_input(){
+    // TODO: read values from BTN0 and BTN1 and process appropriately
+}
 
+static void off_mode() {
+    gpio_set_value(RED,0);
+    gpio_set_value(YELLOW,0);
+    gpio_set_value(GREEN,1);
+    msleep(1*CYCLE);
+
+}
+
+static void normal_mode() {
     gpio_set_value(RED,0);
     gpio_set_value(YELLOW,0);
     gpio_set_value(GREEN,1);
@@ -312,7 +356,7 @@ static void pedestrian_mode() {
 // }
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Megha Shah");
+MODULE_AUTHOR("Megha Shah and Pravi Samaratunga");
 MODULE_DESCRIPTION("my traffic light");
 
 
