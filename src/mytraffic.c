@@ -4,81 +4,7 @@
  *  @author Pravi Samaratunga
  */
 
-// TODO: pull main loop into timer-based implementation
-// TODO: pull header information out into header file
-// TODO: clean up headers
-
-#include <linux/init.h>
-#include <linux/module.h>
-#include <linux/timer.h>
-#include <linux/kernel.h> /* printk() */
-#include <linux/slab.h> /* kmalloc() */
-#include <linux/fs.h> /* everything... */
-#include <linux/errno.h> /* error codes */
-#include <linux/types.h> /* size_t */
-#include <linux/proc_fs.h>
-#include <linux/fcntl.h> /* O_ACCMODE */
-#include <asm/system_misc.h> /* cli(), *_flags */
-#include <linux/uaccess.h>
-#include <asm/uaccess.h> /* copy_from/to_user */
-#include <linux/string.h>
-#include <linux/sched.h> /* get user pid */
-#include <linux/seq_file.h>
-#include <linux/gpio.h>
-#include <linux/err.h>
-#include <linux/cdev.h>
-#include <linux/time.h>
-#include <linux/delay.h> /* msleep() */
-#include <linux/kthread.h> /* kthread_should_stop */
-
-#define BUF_SIZE 10
-
-#define RED 67
-#define YELLOW 68
-#define GREEN 44
-#define BTN0 26
-#define BTN1 46
-
-#define MODE_NORMAL 1
-#define MODE_FLASHING_RED 2
-#define MODE_FLASHING_YELLOW 0
-#define MODE_PEDESTRIAN 3
-#define DEFAULT_MODE MODE_NORMAL
-
-#define CYCLE 100 // Time in ms per flash
-
-/* Declaration of memory.c functions */
-static int mytraffic_open(struct inode *inode, struct file *filp);
-static int mytraffic_release(struct inode *inode, struct file *filp);
-static int mytraffic_release(struct inode *inode, struct file *filp);
-static void mytraffic_exit(void);
-static int mytraffic_init(void);
-
-/* Structure that declares the usual file */
-/* access functions */
-struct file_operations mytraffic_fops = 
-{
-	.open= mytraffic_open,
-	.release= mytraffic_release,
-};
-
-static void update(struct timer_list*);
-
-static void normal_mode(void);
-static void flashing_red_mode(void);
-static void flashing_yellow_mode(void);
-static void pedestrian_mode(void);
-
-/* Global variables of the driver */
-/* Major number */
-static int mytraffic_major = 61;
-
-static char output_buffer[BUF_SIZE];
-static int button[2];
-static int light_mode;
-
-void timestep(struct timer_list* data);
-static struct timer_list cycle_timer;
+#include "include/mytraffic.h"
 
 /* Declaration of the init and exit functions */
 module_init(mytraffic_init);
@@ -133,11 +59,6 @@ static int mytraffic_init(void)
     light_mode = DEFAULT_MODE;
     printk(KERN_ALERT "Inserting mytraffic module\n"); 
 
-//    while (true) {
-//        update();
-//        msleep(CYCLE);
-//    }
-//
     timer_setup(&cycle_timer, update, 0);
     mod_timer(&cycle_timer, jiffies + msecs_to_jiffies(CYCLE));
     return 0;
@@ -282,23 +203,6 @@ static void pedestrian_mode() {
     gpio_set_value(GREEN,0);
     msleep(5*CYCLE);
 }
-
-// static int mytimer_proc_show(struct seq_file *m, void *v)
-// {
-//     unsigned long elapsed_time = jiffies_to_msecs(jiffies - start_time);
-
-//     seq_printf(m, "mytimer- name of the module\n");
-//     seq_printf(m, "%lu- time since module loaded\n", elapsed_time);
-
-//     if (user_pid != -1) {
-//         seq_printf(m, "%d- user pid\n", user_pid);
-//         seq_printf(m, "%s- command\n", command);
-// 		seq_printf(m,"%s- message\n",timers[0].message);
-//         seq_printf(m, "%lu- time remaining\n", get_time_remaining(&timers[0]));
-//     }
-
-//     return 0;
-// }
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Megha Shah and Pravi Samaratunga");
