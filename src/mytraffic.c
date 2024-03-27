@@ -4,7 +4,7 @@
  *  @author Pravi Samaratunga
  */
 
-// TODO: implement state machine (see process_input())
+// TODO: pull main loop into timer-based implementation
 // TODO: pull header information out into header file
 // TODO: clean up headers
 
@@ -39,9 +39,9 @@
 #define BTN0 26
 #define BTN1 46
 
-#define MODE_NORMAL 0
-#define MODE_FLASHING_RED 1
-#define MODE_FLASHING_YELLOW 2
+#define MODE_NORMAL 1
+#define MODE_FLASHING_RED 2
+#define MODE_FLASHING_YELLOW 0
 #define MODE_PEDESTRIAN 3
 #define DEFAULT_MODE MODE_NORMAL
 
@@ -50,24 +50,19 @@
 /* Declaration of memory.c functions */
 static int mytraffic_open(struct inode *inode, struct file *filp);
 static int mytraffic_release(struct inode *inode, struct file *filp);
-// static ssize_t mytraffic_read(struct file *filp, char *buf, size_t count, loff_t *f_pos);
-// static ssize_t mytraffic_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos);
+static int mytraffic_release(struct inode *inode, struct file *filp);
 static void mytraffic_exit(void);
 static int mytraffic_init(void);
-static bool sentinel;
 
 /* Structure that declares the usual file */
 /* access functions */
 struct file_operations mytraffic_fops = 
 {
-// 	.read= mytraffic_read,
-// 	.write= mytraffic_write,
 	.open= mytraffic_open,
 	.release= mytraffic_release,
 };
 
-static void update(void);
-static void process_input(void);
+static void update(struct timer_list*);
 
 static void normal_mode(void);
 static void flashing_red_mode(void);
@@ -81,6 +76,9 @@ static int mytraffic_major = 61;
 static char output_buffer[BUF_SIZE];
 static int button[2];
 static int light_mode;
+
+void timestep(struct timer_list* data);
+static struct timer_list cycle_timer;
 
 /* Declaration of the init and exit functions */
 module_init(mytraffic_init);
@@ -99,13 +97,6 @@ static int mytraffic_init(void)
 			"mytraffic: cannot obtain major number %d\n", mytraffic_major);
 		return result;
 	}
-
-    // procfs entry
-	// proc_entry = proc_create("mytimer", 0444, NULL, &mytimer_fops);
-    // if (!proc_entry) {
-    //     printk(KERN_ALERT "mytimer : Proc entry creation failed\n");
-    //     return -ENOMEM;
-    // }
 
     // gpio initialization
     if(gpio_request(RED,"RED") < 0) {
@@ -142,13 +133,13 @@ static int mytraffic_init(void)
     light_mode = DEFAULT_MODE;
     printk(KERN_ALERT "Inserting mytraffic module\n"); 
 
-//    while (!kthread_should_stop()) {
-    sentinel = true;
-    while (sentinel) {
-        update();
-        msleep(CYCLE);
-    }
-
+//    while (true) {
+//        update();
+//        msleep(CYCLE);
+//    }
+//
+    timer_setup(&cycle_timer, update, 0);
+    mod_timer(&cycle_timer, jiffies + msecs_to_jiffies(CYCLE));
     return 0;
 r_RED:
     gpio_free(RED);
@@ -182,18 +173,17 @@ static void mytraffic_exit(void)
     gpio_free(BTN0);
     gpio_free(BTN1);
 
-    sentinel=false;
     printk(KERN_INFO "Exiting my_module\n");
 }
 
+// TODO: see if this is cruft
 static int mytraffic_open(struct inode *inode, struct file *filp)
 {
 	/* Success */
-	// return single_open(filp, mytimer_proc_show, NULL);
     return 0;
 }
 
-
+// TODO: see if this is cruft
 static int mytraffic_release(struct inode *inode, struct file *filp)
 {
 	memset(output_buffer,0,sizeof(BUF_SIZE));
@@ -202,8 +192,25 @@ static int mytraffic_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static void update () {
-    process_input();
+static void update (struct timer_list* unused) {
+    int btn0 = gpio_get_value(BTN0);
+    int btn1 = gpio_get_value(BTN1);
+
+    // only change state if btns are different
+    if(btn0!=button[0] || btn1!=button[1]) {     
+        button[0] = btn0;
+        button[1] = btn1;
+        if (btn1) {
+            if (btn0) {
+                light_mode = MODE_PEDESTRIAN;
+            }
+        } else {
+            if (btn0) {
+                light_mode = (light_mode + 1) % 3;
+            }
+        }
+    }
+
     switch(light_mode) {
         case MODE_NORMAL:
             normal_mode();
@@ -222,18 +229,8 @@ static void update () {
             printk(KERN_ERR "something went wrong!");
             break;            
     }
-}
 
-/** process_input()
- *  implements light state machine
- */
-static void process_input(){
-    // TODO: read values from BTN0 and BTN1 and process appropriately
-    button[0] = gpio_get_value(BTN0) == 1;
-    button[1] = gpio_get_value(BTN1) == 1;
-    light_mode = (light_mode + button[0]) % 3;
-
-    printk(KERN_ALERT "BTN0 %d\nBTN1 %d\n\n", button[0], button[1]);
+    mod_timer(&cycle_timer, jiffies + msecs_to_jiffies(CYCLE));
 }
 
 static void normal_mode() {
