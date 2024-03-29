@@ -59,9 +59,10 @@ static int mytraffic_init(void)
     light_mode = DEFAULT_MODE;
     printk(KERN_ALERT "Inserting mytraffic module\n"); 
 
-	button[0]=1; // set state off from initial state
+    ped_cache = 0;
+	button[0]=-1; // set state off from initial state
     timer_setup(&cycle_timer, update, 0);
-    mod_timer(&cycle_timer, jiffies + msecs_to_jiffies(CYCLE));
+    mod_timer(&cycle_timer, jiffies + msecs_to_jiffies(CYCLE_UPDATE));
     return 0;
 r_RED:
     gpio_free(RED);
@@ -126,29 +127,19 @@ static void update (struct timer_list* unused) {
     if(btn0!=button[0] || btn1!=button[1]) {     
         button[0] = btn0;
         button[1] = btn1;
-        if (btn0 && light_mode != MODE_PEDESTRIAN) {
+        if (btn0>0) {
                 light_mode = (light_mode + 1) % 3;
             }
+        if (button[1]) pedestrian = 1;
         switch(light_mode) {
             case MODE_NORMAL:
-                normal_mode();
-                if (btn1) {
-                    light_mode = MODE_PEDESTRIAN;
-                }
-                break;
+               normal_mode();
+               break;
             case MODE_FLASHING_RED:
                 flashing_red_mode();
                 break;
             case MODE_FLASHING_YELLOW:
                 flashing_yellow_mode();
-                break;
-            case MODE_PEDESTRIAN:
-                pedestrian_mode();
-                if (btn1) {
-                    light_mode = MODE_PEDESTRIAN;
-                } else {
-                    light_mode = MODE_NORMAL;
-                }
                 break;
             default:
                 normal_mode();
@@ -160,68 +151,68 @@ static void update (struct timer_list* unused) {
 }
 
 static void normal_mode() {
+    int p, i;
+    pedestrian = ped_cache;
     gpio_set_value(RED,0);
     gpio_set_value(YELLOW,0);
     gpio_set_value(GREEN,1);
-    msleep(1*CYCLE);
-	if (light_mode != MODE_NORMAL && light_mode != MODE_PEDESTRIAN) return;
-    msleep(1*CYCLE);
-	if (light_mode != MODE_NORMAL && light_mode != MODE_PEDESTRIAN) return;
-    msleep(1*CYCLE);
-	if (light_mode != MODE_NORMAL && light_mode != MODE_PEDESTRIAN) return;
+    msleep(CYCLE); // do 3 times with interrupts
+    if (!pedestrian && light_mode != MODE_NORMAL) return;
+    msleep(CYCLE); // do 3 times with interrupts
+    if (!pedestrian && light_mode != MODE_NORMAL) return;
+    msleep(CYCLE); // do 3 times with interrupts
+    if (!pedestrian && light_mode != MODE_NORMAL) return;
     gpio_set_value(RED,0);
     gpio_set_value(YELLOW,1);
     gpio_set_value(GREEN,0);
-    msleep(1*CYCLE);
-	if (light_mode != MODE_NORMAL && light_mode != MODE_PEDESTRIAN) return;
+    msleep(CYCLE); // do 3 times with interrupts
+    if (!pedestrian && light_mode != MODE_NORMAL) return;
+    p = pedestrian; // lock in pedestrian
+    pedestrian = 0;
+    ped_cache = 0;
     gpio_set_value(RED,1);
-    gpio_set_value(YELLOW,0);
+    gpio_set_value(YELLOW,p);
     gpio_set_value(GREEN,0);
-    msleep(1*CYCLE);
-	if (light_mode != MODE_NORMAL && light_mode != MODE_PEDESTRIAN) return;
-    msleep(1*CYCLE);
-	if (light_mode != MODE_NORMAL && light_mode != MODE_PEDESTRIAN) return;
+    for (i = 0; i < 2 + 3*p; i++) {
+        msleep(CYCLE); // do 2 or 5 times with interrupts
+        if (pedestrian) ped_cache = 1;
+        if (!p && light_mode != MODE_NORMAL) return;
+    }
+    if (p) light_mode = MODE_NORMAL;
+    pedestrian = 0;
+    button[0] = -1;
 
 }
 
 static void flashing_red_mode() {
+    pedestrian = 0;
     gpio_set_value(RED,1);
     gpio_set_value(YELLOW,0);
     gpio_set_value(GREEN,0);
-    msleep(10*CYCLE);
+    msleep(CYCLE);
 	if (light_mode != MODE_FLASHING_RED) return;
     gpio_set_value(RED,0);
     gpio_set_value(YELLOW,0);
     gpio_set_value(GREEN,0);
-    msleep(10*CYCLE);
+    msleep(CYCLE);
 	if (light_mode != MODE_FLASHING_RED) return;
+    button[0] = -1;
 }
 
 static void flashing_yellow_mode() {
-
+    pedestrian = 0;
     gpio_set_value(RED,0);
     gpio_set_value(YELLOW,1);
     gpio_set_value(GREEN,0);
-    msleep(1*CYCLE);
+    msleep(CYCLE);
 	if (light_mode != MODE_FLASHING_YELLOW) return;
     gpio_set_value(RED,0);
     gpio_set_value(YELLOW,0);
     gpio_set_value(GREEN,0);
-    msleep(1*CYCLE);
+    msleep(CYCLE);
 	if (light_mode != MODE_FLASHING_YELLOW) return;
+    button[0] = -1;
 
-}
-
-static void pedestrian_mode() {
-
-    gpio_set_value(RED,1);
-    gpio_set_value(YELLOW,1);
-    gpio_set_value(GREEN,0);
-    msleep(5*CYCLE);
-    gpio_set_value(RED,0);
-    gpio_set_value(YELLOW,0);
-    gpio_set_value(GREEN,0);
-    msleep(5*CYCLE);
 }
 
 MODULE_LICENSE("GPL");

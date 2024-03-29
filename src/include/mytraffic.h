@@ -19,11 +19,11 @@
 #define MODE_NORMAL 0
 #define MODE_FLASHING_RED 1
 #define MODE_FLASHING_YELLOW 2
-#define MODE_PEDESTRIAN 3
+//#define MODE_PEDESTRIAN 3
 #define DEFAULT_MODE MODE_NORMAL
 
 #define CYCLE 500 // Time in ms per flash
-#define CYCLE_UPDATE 100 // Time between calls of the update fn
+#define CYCLE_UPDATE 50 // Time between calls of the update fn
 
 /* Declaration of memory.c functions */
 static int mytraffic_init(void);
@@ -47,7 +47,7 @@ struct file_operations mytraffic_fops =
 static void normal_mode(void);
 static void flashing_red_mode(void);
 static void flashing_yellow_mode(void);
-static void pedestrian_mode(void);
+//static void pedestrian_mode(void);
 
 /* Global variables of the driver */
 /* Major number */
@@ -56,6 +56,8 @@ static int mytraffic_major = 61;
 static char output_buffer[BUF_SIZE];
 static int button[2];
 static int light_mode;
+static int pedestrian;
+static int ped_cache;
 
 static struct timer_list cycle_timer;
 static void update(struct timer_list*);
