@@ -23,12 +23,16 @@
 #define DEFAULT_MODE MODE_NORMAL
 
 #define CYCLE 500 // Time in ms per flash
+#define CYCLE_UPDATE 100 // Time between calls of the update fn
 
 /* Declaration of memory.c functions */
 static int mytraffic_init(void);
 static void mytraffic_exit(void);
 static int mytraffic_open(struct inode *inode, struct file *filp);
 static int mytraffic_release(struct inode *inode, struct file *filp);
+//static int mytraffic_read(struct inode *inode, struct file *filp, );
+//static int mytraffic_write(struct inode *inode, struct file *filp);
+
 
 /* Structure that declares the usual file */
 /* access functions */
@@ -36,6 +40,8 @@ struct file_operations mytraffic_fops =
 {
 	.open= mytraffic_open,
 	.release= mytraffic_release,
+//    .read = mytraffic_read(struct inode *inode, struct file *filp);
+//    .write = mytraffic_write(struct inode *inode, struct file *filp);
 };
 
 static void normal_mode(void);
