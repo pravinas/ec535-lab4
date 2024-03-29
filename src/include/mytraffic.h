@@ -22,7 +22,7 @@
 #define MODE_PEDESTRIAN 3
 #define DEFAULT_MODE MODE_NORMAL
 
-#define CYCLE 100 // Time in ms per flash
+#define CYCLE 500 // Time in ms per flash
 
 /* Declaration of memory.c functions */
 static int mytraffic_init(void);

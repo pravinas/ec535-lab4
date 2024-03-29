@@ -121,20 +121,17 @@ static void update (struct timer_list* unused) {
     if(btn0!=button[0] || btn1!=button[1]) {     
         button[0] = btn0;
         button[1] = btn1;
-        if (btn1) {
-            if (btn0) {
-                light_mode = MODE_PEDESTRIAN;
-            }
-        } else {
-            if (btn0) {
+        if (btn0 && light_mode != MODE_PEDESTRIAN) {
                 light_mode = (light_mode + 1) % 3;
             }
-        }
     }
 
     switch(light_mode) {
         case MODE_NORMAL:
             normal_mode();
+            if (btn1) {
+                light_mode = MODE_PEDESTRIAN;
+            }
             break;
         case MODE_FLASHING_RED:
             flashing_red_mode();
@@ -144,6 +141,11 @@ static void update (struct timer_list* unused) {
             break;
         case MODE_PEDESTRIAN:
             pedestrian_mode();
+            if (btn1) {
+                light_mode = MODE_PEDESTRIAN;
+            } else {
+                light_mode = MODE_NORMAL;
+            }
             break;
         default:
             normal_mode();
@@ -202,6 +204,10 @@ static void pedestrian_mode() {
     gpio_set_value(YELLOW,1);
     gpio_set_value(GREEN,0);
     msleep(5*CYCLE);
+    gpio_set_value(RED,0);
+    gpio_set_value(YELLOW,0);
+    gpio_set_value(GREEN,0);
+    msleep(5*CYCLE);
 }
 
 MODULE_LICENSE("GPL");
@@ -214,4 +220,5 @@ MODULE_DESCRIPTION("my traffic light");
  * cant use msleep- convert to frequency
  * bonus is not implemented
  * procfs file setup
+ * you have to hold button for 1s if timer is 1s long
 */
