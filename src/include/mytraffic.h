@@ -7,8 +7,9 @@
 #include <linux/module.h> /* everything */
 #include <linux/gpio.h>
 #include <linux/delay.h> /* msleep */
+#include <linux/uaccess.h> /* copy to/from user */
 
-#define BUF_SIZE 10
+#define BUF_SIZE 800
 
 #define RED 67
 #define YELLOW 68
@@ -30,8 +31,8 @@ static int mytraffic_init(void);
 static void mytraffic_exit(void);
 static int mytraffic_open(struct inode *inode, struct file *filp);
 static int mytraffic_release(struct inode *inode, struct file *filp);
-//static int mytraffic_read(struct inode *inode, struct file *filp, );
-//static int mytraffic_write(struct inode *inode, struct file *filp);
+static ssize_t mytraffic_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos);
+static ssize_t mytraffic_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos);
 
 
 /* Structure that declares the usual file */
@@ -40,13 +41,14 @@ struct file_operations mytraffic_fops =
 {
 	.open= mytraffic_open,
 	.release= mytraffic_release,
-//    .read = mytraffic_read(struct inode *inode, struct file *filp);
-//    .write = mytraffic_write(struct inode *inode, struct file *filp);
+    .read = mytraffic_read,
+    .write = mytraffic_write,
 };
 
 static void normal_mode(void);
 static void flashing_red_mode(void);
 static void flashing_yellow_mode(void);
+static void set_gpio_vals(void);
 //static void pedestrian_mode(void);
 
 /* Global variables of the driver */
@@ -54,7 +56,9 @@ static void flashing_yellow_mode(void);
 static int mytraffic_major = 61;
 
 static char output_buffer[BUF_SIZE];
+static double cycle_ms;
 static int button[2];
+static int outputs[3]; // order: red yellow green
 static int light_mode;
 static int pedestrian;
 static int ped_cache;

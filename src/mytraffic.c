@@ -60,7 +60,11 @@ static int mytraffic_init(void)
     printk(KERN_ALERT "Inserting mytraffic module\n"); 
 
     ped_cache = 0;
+    outputs[0] = 0;
+    outputs[1] = 0;
+    outputs[2] = 0;
 	button[0]=-1; // set state off from initial state
+    cycle_ms = CYCLE;
     timer_setup(&cycle_timer, update, 0);
     mod_timer(&cycle_timer, jiffies + msecs_to_jiffies(CYCLE_UPDATE));
     return 0;
@@ -117,6 +121,12 @@ static int mytraffic_release(struct inode *inode, struct file *filp)
     return 0;
 }
 
+static void set_gpio_vals() {
+    gpio_set_value(RED,outputs[0]);
+    gpio_set_value(YELLOW,outputs[1]);
+    gpio_set_value(GREEN,outputs[2]);
+}
+
 static void update (struct timer_list* unused) {
 	int btn0, btn1;
 	mod_timer(&cycle_timer, jiffies + msecs_to_jiffies(CYCLE_UPDATE));
@@ -153,65 +163,136 @@ static void update (struct timer_list* unused) {
 static void normal_mode() {
     int p, i;
     pedestrian = ped_cache;
-    gpio_set_value(RED,0);
-    gpio_set_value(YELLOW,0);
-    gpio_set_value(GREEN,1);
-    msleep(CYCLE); // do 3 times with interrupts
+    outputs[0] = 0;
+    outputs[1] = 0;
+    outputs[2] = 1;
+    set_gpio_vals();
+     
+    msleep(cycle_ms); // do 3 times with interrupts
     if (!pedestrian && light_mode != MODE_NORMAL) return;
-    msleep(CYCLE); // do 3 times with interrupts
+    msleep(cycle_ms); // do 3 times with interrupts
     if (!pedestrian && light_mode != MODE_NORMAL) return;
-    msleep(CYCLE); // do 3 times with interrupts
+    msleep(cycle_ms); // do 3 times with interrupts
     if (!pedestrian && light_mode != MODE_NORMAL) return;
-    gpio_set_value(RED,0);
-    gpio_set_value(YELLOW,1);
-    gpio_set_value(GREEN,0);
-    msleep(CYCLE); // do 3 times with interrupts
+
+    outputs[0] = 0;
+    outputs[1] = 1;
+    outputs[2] = 0;
+    set_gpio_vals();
+
+    msleep(cycle_ms); 
     if (!pedestrian && light_mode != MODE_NORMAL) return;
     p = pedestrian; // lock in pedestrian
     pedestrian = 0;
     ped_cache = 0;
-    gpio_set_value(RED,1);
-    gpio_set_value(YELLOW,p);
-    gpio_set_value(GREEN,0);
+
+    outputs[0] = 1;
+    outputs[1] = p;
+    outputs[2] = 0;
+    set_gpio_vals();
+
     for (i = 0; i < 2 + 3*p; i++) {
-        msleep(CYCLE); // do 2 or 5 times with interrupts
+        msleep(cycle_ms); // do 2 or 5 times with interrupts
         if (pedestrian) ped_cache = 1;
         if (!p && light_mode != MODE_NORMAL) return;
     }
     if (p) light_mode = MODE_NORMAL;
     pedestrian = 0;
     button[0] = -1;
-
 }
 
 static void flashing_red_mode() {
     pedestrian = 0;
-    gpio_set_value(RED,1);
-    gpio_set_value(YELLOW,0);
-    gpio_set_value(GREEN,0);
-    msleep(CYCLE);
+    outputs[0] = 1;
+    outputs[1] = 0;
+    outputs[2] = 0;
+    set_gpio_vals();
+    msleep(cycle_ms);
 	if (light_mode != MODE_FLASHING_RED) return;
-    gpio_set_value(RED,0);
-    gpio_set_value(YELLOW,0);
-    gpio_set_value(GREEN,0);
-    msleep(CYCLE);
+    outputs[0] = 0;
+    outputs[1] = 0;
+    outputs[2] = 0;
+    set_gpio_vals();
+    msleep(cycle_ms);
 	if (light_mode != MODE_FLASHING_RED) return;
     button[0] = -1;
 }
 
 static void flashing_yellow_mode() {
     pedestrian = 0;
-    gpio_set_value(RED,0);
-    gpio_set_value(YELLOW,1);
-    gpio_set_value(GREEN,0);
-    msleep(CYCLE);
+    outputs[0] = 0;
+    outputs[1] = 1;
+    outputs[2] = 0;
+    set_gpio_vals();
+    msleep(cycle_ms);
 	if (light_mode != MODE_FLASHING_YELLOW) return;
-    gpio_set_value(RED,0);
-    gpio_set_value(YELLOW,0);
-    gpio_set_value(GREEN,0);
-    msleep(CYCLE);
+    outputs[0] = 0;
+    outputs[1] = 0;
+    outputs[2] = 0;
+    set_gpio_vals();
+    msleep(cycle_ms);
 	if (light_mode != MODE_FLASHING_YELLOW) return;
     button[0] = -1;
+
+}
+
+static ssize_t mytraffic_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos){
+    char input[256];
+
+	if (count > 256) 
+	{
+		count = 256;
+	}
+
+	if (copy_from_user(input, buf, count))
+	{
+		return -1;
+	}
+
+    if ('0' < input[0] && input[0] <= '9') {
+        cycle_ms = 1000.0/(input[0]-'0');
+    }
+    return count;
+
+
+}
+static ssize_t mytraffic_read(struct file *filp,char __user *buf, size_t count, loff_t *f_pos)
+{
+	char fbuf[BUF_SIZE], *fptr = fbuf;
+
+	if (count > BUF_SIZE) 
+	{
+		count = BUF_SIZE;
+	}
+
+
+    fptr += sprintf(fptr, "~~~\nTRAFFIC DIAGNOSTICS\n");
+
+    switch (light_mode) {
+        case MODE_NORMAL:
+            fptr += sprintf(fptr, "Operational Mode: Normal\n");
+            break;
+        case MODE_FLASHING_RED:
+            fptr += sprintf(fptr, "Operational Mode: Flashing Red\n");
+            break;
+        case MODE_FLASHING_YELLOW:
+            fptr += sprintf(fptr, "Operational Mode: Flashing Yellow\n");
+            break;
+    }
+
+    fptr += sprintf(fptr, "Cycle Rate: %.2f\n", 1000.0/cycle_ms);
+
+    fptr += sprintf(fptr, "Lights:\tRED\tYELLOW\tGREEN\n");
+    fptr += sprintf(fptr, "Values:\t%s\t%s\t%s\n", outputs[0]?"on":"off",outputs[1]?"on":"off",outputs[2]?"on":"off");
+
+    fptr += sprintf(fptr, "Pedestrian: %s\n", pedestrian? "yes": "no");
+
+	if (copy_to_user(buf, fptr, count))
+	{
+        // do we need to free fptr?
+		return -EFAULT;
+	}
+    return count;
 
 }
 
