@@ -290,35 +290,35 @@ static ssize_t mytraffic_write(struct file *filp, const char *buf, size_t count,
 static ssize_t mytraffic_read(struct file *filp,char __user *buf, size_t count, loff_t *f_pos)
 {
 	char fbuf[BUF_SIZE], *fptr = fbuf;
-
-	if (count > BUF_SIZE) 
-	{
-		count = BUF_SIZE;
-	}
-
-
+    
     fptr += sprintf(fptr, "~~~\nTRAFFIC DIAGNOSTICS\n");
 
     switch (light_mode) {
         case MODE_NORMAL:
-            fptr += sprintf(fptr, "Operational Mode: Normal\n");
+            fptr += sprintf(fptr, "Operational Mode: Normal         \n");
             break;
         case MODE_FLASHING_RED:
-            fptr += sprintf(fptr, "Operational Mode: Flashing Red\n");
+            fptr += sprintf(fptr, "Operational Mode: Flashing Red   \n");
             break;
         case MODE_FLASHING_YELLOW:
             fptr += sprintf(fptr, "Operational Mode: Flashing Yellow\n");
             break;
     }
 
-    fptr += sprintf(fptr, "Cycle Rate: %.2f\n", 500.0); //1000.0/cycle_ms);
+    fptr += sprintf(fptr, "Cycle Rate: %d \n", 500); //1000.0/cycle_ms);
 
     fptr += sprintf(fptr, "Lights:\tRED\tYELLOW\tGREEN\n");
-    fptr += sprintf(fptr, "Values:\t%s\t%s\t%s\n", outputs[0]?"on":"off",outputs[1]?"on":"off",outputs[2]?"on":"off");
+    fptr += sprintf(fptr, "Values:\t%s\t%s\t%s\n", outputs[0]?"on ":"off",outputs[1]?"on ":"off",outputs[2]?"on ":"off");
 
-    fptr += sprintf(fptr, "Pedestrian: %s\n", pedestrian? "yes": "no");
+    fptr += sprintf(fptr, "Pedestrian: %s\n", pedestrian? "yes": "no ");
+    count = strlen(fbuf);
 
-	if (copy_to_user(buf, fptr, count))
+   	if (count > BUF_SIZE) 
+   	{
+   		count = BUF_SIZE;
+   	}
+
+	if (copy_to_user(buf, fbuf, count))
 	{
         // do we need to free fptr?
 		return -EFAULT;

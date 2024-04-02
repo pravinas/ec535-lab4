@@ -22,7 +22,7 @@
 #define MODE_FLASHING_YELLOW 2
 //#define MODE_PEDESTRIAN 3
 #define DEFAULT_MODE MODE_NORMAL
-#define GPIO
+//#define GPIO
 
 #define CYCLE 500 // Time in ms per flash
 #define CYCLE_UPDATE 50 // Time between calls of the update fn
