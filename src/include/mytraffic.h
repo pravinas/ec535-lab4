@@ -64,7 +64,7 @@ static int outputs[3]; // order: red yellow green
 static int light_mode;
 static int pedestrian;
 static int ped_cache;
-int inc,btn0,btn1;
+static int inc,btn0,btn1;
 
 static struct timer_list cycle_timer;
 static void update(struct timer_list*);

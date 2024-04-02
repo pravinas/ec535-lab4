@@ -152,7 +152,7 @@ static void simulate_button_press() {
 }
 
 static void update (struct timer_list* unused) {
-	int btn0, btn1;
+	//int btn0, btn1;
 	mod_timer(&cycle_timer, jiffies + msecs_to_jiffies(CYCLE_UPDATE));
     #ifndef GPIO
     btn0 = gpio_get_value(BTN0);
