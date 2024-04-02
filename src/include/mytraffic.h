@@ -22,6 +22,7 @@
 #define MODE_FLASHING_YELLOW 2
 //#define MODE_PEDESTRIAN 3
 #define DEFAULT_MODE MODE_NORMAL
+#define GPIO
 
 #define CYCLE 500 // Time in ms per flash
 #define CYCLE_UPDATE 50 // Time between calls of the update fn
@@ -49,6 +50,7 @@ static void normal_mode(void);
 static void flashing_red_mode(void);
 static void flashing_yellow_mode(void);
 static void set_gpio_vals(void);
+static void simulate_button_press(void);
 //static void pedestrian_mode(void);
 
 /* Global variables of the driver */
@@ -56,12 +58,13 @@ static void set_gpio_vals(void);
 static int mytraffic_major = 61;
 
 static char output_buffer[BUF_SIZE];
-static double cycle_ms;
+static int cycle_ms;
 static int button[2];
 static int outputs[3]; // order: red yellow green
 static int light_mode;
 static int pedestrian;
 static int ped_cache;
+int inc,btn0,btn1;
 
 static struct timer_list cycle_timer;
 static void update(struct timer_list*);
